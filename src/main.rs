@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 use std::collections::HashMap;
+use std::env;
 
 struct WordTree<'a> {
     children: HashMap<char, WordTree<'a>>,
@@ -65,10 +66,30 @@ fn read_word_list() -> Vec<String> {
     words
 }
 
+fn parse_args(args: &[String]) -> (Vec<char>, char) {
+    if args.len() < 2 {
+        panic!("Must supply blossom letters")
+    }
+    let mut letters = Vec::new();
+    let mut first = true;
+    for arg in args {
+        if first {
+            first = false;
+            continue;
+        }
+        if arg.len() != 1 {
+            panic!("All args must be single characters");
+        }
+        letters.push(arg.chars().next().unwrap());
+    }
+    let mandatory_letter = letters[0];
+    return (letters, mandatory_letter);
+}
+
 fn main() {
     let words = read_word_list();
-    let letters = ['l', 'o', 'b', 'x'];
-    let manadatory_letter = 'x';
+    let args: Vec<String> = env::args().collect();
+    let (letters, mandatory_letter) = parse_args(&args);
 
     let mut word_tree = build_wordtree_node();
     for word in &words {
@@ -76,6 +97,6 @@ fn main() {
     }
 
     let mut found_words: Vec<&String> = Vec::new();
-    word_tree.find_words(&letters, manadatory_letter, &mut found_words);
+    word_tree.find_words(&letters, mandatory_letter, &mut found_words);
     println!("Vec: {:?}", found_words);
 }
