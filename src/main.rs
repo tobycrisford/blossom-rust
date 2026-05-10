@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 use std::collections::HashMap;
-use std::env;
+use std::time::Instant;
 
 struct WordTree<'a> {
     children: HashMap<char, WordTree<'a>>,
@@ -66,37 +66,44 @@ fn read_word_list() -> Vec<String> {
     words
 }
 
-fn parse_args(args: &[String]) -> (Vec<char>, char) {
-    if args.len() < 2 {
+fn parse_input(input: &str) -> (Vec<char>, char) {
+    if input.len() < 1 {
         panic!("Must supply blossom letters")
     }
-    let mut letters = Vec::new();
-    let mut first = true;
-    for arg in args {
-        if first {
-            first = false;
-            continue;
-        }
-        if arg.len() != 1 {
-            panic!("All args must be single characters");
-        }
-        letters.push(arg.chars().next().unwrap());
+    let mut letters: Vec<char> = Vec::new();
+    let mandatory_letter = input.chars().next().unwrap();
+    for c in input.chars() {
+        letters.push(c);
     }
-    let mandatory_letter = letters[0];
     return (letters, mandatory_letter);
 }
 
 fn main() {
+    let start = Instant::now();
     let words = read_word_list();
-    let args: Vec<String> = env::args().collect();
-    let (letters, mandatory_letter) = parse_args(&args);
-
     let mut word_tree = build_wordtree_node();
     for word in &words {
         word_tree.add_word(word, 0);
     }
+    println!("Loaded the word list in {} milliseconds", start.elapsed().as_millis());
 
-    let mut found_words: Vec<&String> = Vec::new();
-    word_tree.find_words(&letters, mandatory_letter, &mut found_words);
-    println!("Vec: {:?}", found_words);
+    loop {
+        println!("Input all letters, center letter first, lowercase and without spaces");
+
+        let mut user_input = String::new();
+
+        io::stdin()
+            .read_line(&mut user_input)
+            .expect("Failed to read line");
+
+        let (letters, mandatory_letter) = parse_input(&user_input);
+
+        let search_start = Instant::now();
+        let mut found_words: Vec<&String> = Vec::new();
+        word_tree.find_words(&letters, mandatory_letter, &mut found_words);
+        found_words.sort_by_key(|w| w.len());
+        found_words.reverse();
+        println!("Found words: {:?}", found_words);
+        println!("Completed in {} milliseconds", search_start.elapsed().as_millis());
+    }
 }
