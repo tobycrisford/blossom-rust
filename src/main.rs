@@ -24,13 +24,15 @@ impl<'a> WordTree<'a> {
         }
     }
 
-    fn find_words(&self, available_letters: &[char], found_words: &mut Vec<&'a String>) {
+    fn find_words(&self, available_letters: &[char], mandatory_letter: char, found_words: &mut Vec<&'a String>) {
         if let Some(word) = self.word {
-            found_words.push(word);
+            if let Some(_) = word.find(mandatory_letter) {
+                found_words.push(word);
+            }
         }
         for letter in available_letters {
             if let Some(child) = self.children.get(letter) {
-                child.find_words(available_letters, found_words);
+                child.find_words(available_letters, mandatory_letter, found_words);
             }
         }
     }
@@ -65,7 +67,8 @@ fn read_word_list() -> Vec<String> {
 
 fn main() {
     let words = read_word_list();
-    let letters = ['l', 'o', 'b'];
+    let letters = ['l', 'o', 'b', 'x'];
+    let manadatory_letter = 'x';
 
     let mut word_tree = build_wordtree_node();
     for word in &words {
@@ -73,6 +76,6 @@ fn main() {
     }
 
     let mut found_words: Vec<&String> = Vec::new();
-    word_tree.find_words(&letters, &mut found_words);
+    word_tree.find_words(&letters, manadatory_letter, &mut found_words);
     println!("Vec: {:?}", found_words);
 }
