@@ -100,6 +100,11 @@ fn parse_input(input: &str) -> (Vec<char>, char, HashSet<char>) {
     return (letters, mandatory_letter, letter_set);
 }
 
+fn sort_output(word_list: &mut Vec<&String>) {
+    word_list.sort_by_key(|w| w.len());
+    word_list.reverse();
+}
+
 fn main() {
     let start = Instant::now();
     let words = read_word_list();
@@ -123,16 +128,14 @@ fn main() {
         let search_start = Instant::now();
         let mut found_words: Vec<&String> = Vec::new();
         word_tree.find_words(&letters, mandatory_letter, &mut found_words);
-        found_words.sort_by_key(|w| w.len());
-        found_words.reverse();
+        sort_output(&mut found_words);
         println!("Found words: {:?}", found_words);
         println!("Completed in {} milliseconds", search_start.elapsed().as_millis());
 
         let baseline_start = Instant::now();
         let mut baseline_words: Vec<&String> = Vec::new();
         simple_baseline(&words, &letter_set, mandatory_letter, &mut baseline_words);
-        baseline_words.sort_by_key(|w| w.len());
-        baseline_words.reverse();
+        sort_output(&mut baseline_words);
         println!("Baseline words: {:?}", baseline_words);
         println!("Baseline completed in {} milliseconds", baseline_start.elapsed().as_millis());
     }
