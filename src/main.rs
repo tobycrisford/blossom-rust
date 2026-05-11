@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::time::Instant;
 
 struct WordTree<'a> {
@@ -45,6 +46,25 @@ fn build_wordtree_node<'a>() -> WordTree<'a> {
     }
 }
 
+fn simple_baseline<'a>(word_list: &'a Vec<String>, letters: &HashSet<char>, mandatory_letter: char, found_words: &mut Vec<&'a String>) {
+    for word in word_list {
+        let mut valid = true;
+        let mut mandatory_valid = false;
+        for c in word.chars() {
+            if !letters.contains(&c) {
+                valid = false;
+                break;
+            }
+            if c == mandatory_letter {
+                mandatory_valid = true;
+            }
+        }
+        if valid & mandatory_valid {
+            found_words.push(word);
+        }
+    }
+}
+
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
 where P: AsRef<Path>, {
     let file = File::open(filename)?;
@@ -66,16 +86,18 @@ fn read_word_list() -> Vec<String> {
     words
 }
 
-fn parse_input(input: &str) -> (Vec<char>, char) {
+fn parse_input(input: &str) -> (Vec<char>, char, HashSet<char>) {
     if input.len() < 1 {
         panic!("Must supply blossom letters")
     }
     let mut letters: Vec<char> = Vec::new();
     let mandatory_letter = input.chars().next().unwrap();
+    let mut letter_set: HashSet<char> = HashSet::new();
     for c in input.chars() {
         letters.push(c);
+        letter_set.insert(c);
     }
-    return (letters, mandatory_letter);
+    return (letters, mandatory_letter, letter_set);
 }
 
 fn main() {
@@ -96,7 +118,7 @@ fn main() {
             .read_line(&mut user_input)
             .expect("Failed to read line");
 
-        let (letters, mandatory_letter) = parse_input(&user_input);
+        let (letters, mandatory_letter, letter_set) = parse_input(&user_input);
 
         let search_start = Instant::now();
         let mut found_words: Vec<&String> = Vec::new();
@@ -105,5 +127,13 @@ fn main() {
         found_words.reverse();
         println!("Found words: {:?}", found_words);
         println!("Completed in {} milliseconds", search_start.elapsed().as_millis());
+
+        let baseline_start = Instant::now();
+        let mut baseline_words: Vec<&String> = Vec::new();
+        simple_baseline(&words, &letter_set, mandatory_letter, &mut baseline_words);
+        baseline_words.sort_by_key(|w| w.len());
+        baseline_words.reverse();
+        println!("Baseline words: {:?}", baseline_words);
+        println!("Baseline completed in {} milliseconds", baseline_start.elapsed().as_millis());
     }
 }
