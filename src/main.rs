@@ -1,39 +1,63 @@
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::Instant;
 
+fn letter_index(c: &char) -> Result<usize, String> {
+    if c.is_ascii_lowercase() {
+        Ok((*c as usize) - ('a' as usize))
+    } else {
+        Err(format!("expected lowercase letter, got '{}'", c))
+    }
+}
+
+fn word_to_idx_vec(w: &String) -> Result<Vec<usize>, String> {
+    let mut result: Vec<usize> = Vec::new();
+    for c in w.chars() {
+        result.push(letter_index(&c)?);
+    }
+    return Ok(result);
+}
+
 struct WordTree<'a> {
-    children: HashMap<char, WordTree<'a>>,
+    children: [Option<Box<WordTree<'a>>>; 26],
     word: Option<&'a String>,
 }
 impl<'a> WordTree<'a> {
-    fn add_word(&mut self, word: &'a String, current_idx: usize) {
-        if let Some(next_char) = word.chars().nth(current_idx) {
-            if let Some(child) = self.children.get_mut(&next_char) {
-                child.add_word(&word, current_idx + 1);
-            }
-            else {
-                let mut new_child = build_wordtree_node();
-                new_child.add_word(word, current_idx + 1);
-                self.children.insert(next_char, new_child);
+    fn add_word(&mut self, word_str: &'a String, mut word: Option<Vec<usize>>, current_idx: usize) {
+        if word.is_none() {
+            match word_to_idx_vec(word_str) {
+                Ok(idx_vec) => {
+                    word = Some(idx_vec);
+                }
+                Err(_) => {
+                    println!("Skipping {} as it has bad characters", word_str);
+                    return;
+                }
             }
         }
+        let unwrapped_word = word.unwrap();
+        if current_idx < unwrapped_word.len() {
+            let c = unwrapped_word[current_idx];
+            if self.children[c].is_none() {
+                self.children[c] = Some(Box::new(build_wordtree_node()));
+            }
+            self.children[c].as_mut().unwrap().add_word(word_str, Some(unwrapped_word), current_idx + 1);
+        }
         else {
-            self.word = Some(word);
+            self.word = Some(word_str);
         }
     }
 
-    fn find_words(&self, available_letters: &[char], mandatory_letter: char, found_words: &mut Vec<&'a String>) {
+    fn find_words(&self, available_letters: &[usize], mandatory_letter: char, found_words: &mut Vec<&'a String>) {
         if let Some(word) = self.word {
             if let Some(_) = word.find(mandatory_letter) {
                 found_words.push(word);
             }
         }
         for letter in available_letters {
-            if let Some(child) = self.children.get(letter) {
+            if let Some(child) = &self.children[*letter] {
                 child.find_words(available_letters, mandatory_letter, found_words);
             }
         }
@@ -41,7 +65,7 @@ impl<'a> WordTree<'a> {
 }
 fn build_wordtree_node<'a>() -> WordTree<'a> {
     WordTree {
-        children: HashMap::new(),
+        children: [const { None }; 26],
         word: None,
     }
 }
@@ -94,6 +118,9 @@ fn parse_input(input: &str) -> (Vec<char>, char, HashSet<char>) {
     let mandatory_letter = input.chars().next().unwrap();
     let mut letter_set: HashSet<char> = HashSet::new();
     for c in input.chars() {
+        if c == '\n' {
+            continue;
+        }
         letters.push(c);
         letter_set.insert(c);
     }
@@ -105,12 +132,13 @@ fn sort_output(word_list: &mut Vec<&String>) {
     word_list.reverse();
 }
 
-fn main() {
+#[allow(unreachable_code)]
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
     let words = read_word_list();
     let mut word_tree = build_wordtree_node();
     for word in &words {
-        word_tree.add_word(word, 0);
+        word_tree.add_word(word, None, 0);
     }
     println!("Loaded the word list in {} milliseconds", start.elapsed().as_millis());
 
@@ -127,10 +155,11 @@ fn main() {
 
         let search_start = Instant::now();
         let mut found_words: Vec<&String> = Vec::new();
-        word_tree.find_words(&letters, mandatory_letter, &mut found_words);
+        let letter_idxs: Vec<usize> = letters.iter().map(letter_index).collect::<Result<Vec<_>, _>>()?;
+        word_tree.find_words(&letter_idxs, mandatory_letter, &mut found_words);
         sort_output(&mut found_words);
         println!("Found words: {:?}", found_words);
-        println!("Completed in {} milliseconds", search_start.elapsed().as_millis());
+        println!("Completed in {} microseconds", search_start.elapsed().as_micros());
 
         let baseline_start = Instant::now();
         let mut baseline_words: Vec<&String> = Vec::new();
@@ -139,4 +168,6 @@ fn main() {
         println!("Baseline words: {:?}", baseline_words);
         println!("Baseline completed in {} milliseconds", baseline_start.elapsed().as_millis());
     }
+
+    Ok(())
 }
