@@ -17,12 +17,22 @@ fn word_to_idx_vec(w: &String) -> Result<Vec<usize>, String> {
     for c in w.chars() {
         result.push(letter_index(&c)?);
     }
-    return Ok(result);
+    result.sort();
+
+    let mut deduped_result = Vec::new();
+    let mut last_char: usize = 26 + 1;
+    for ch in result {
+        if ch != last_char {
+            last_char = ch;
+            deduped_result.push(ch);
+        }
+    }
+    return Ok(deduped_result);
 }
 
 struct WordTree<'a> {
     children: [Option<Box<WordTree<'a>>>; 26],
-    word: Option<&'a String>,
+    words: Option<Vec<&'a String>>,
 }
 impl<'a> WordTree<'a> {
     fn add_word(&mut self, word_str: &'a String, mut word: Option<Vec<usize>>, current_idx: usize) {
@@ -46,14 +56,18 @@ impl<'a> WordTree<'a> {
             self.children[c].as_mut().unwrap().add_word(word_str, Some(unwrapped_word), current_idx + 1);
         }
         else {
-            self.word = Some(word_str);
+            if self.words.is_none() {
+                self.words = Some(Vec::new());
+            }
+            self.words.as_mut().unwrap().push(word_str);
         }
     }
 
     fn find_words(&self, available_letters: &[usize], mandatory_letter: char, found_words: &mut Vec<&'a String>) {
-        if let Some(word) = self.word {
-            if let Some(_) = word.find(mandatory_letter) {
-                found_words.push(word);
+        if let Some(words) = &self.words {
+            let test_word = &words[0];
+            if let Some(_) = test_word.find(mandatory_letter) {
+                found_words.extend(words.iter().copied());
             }
         }
         for letter in available_letters {
@@ -66,7 +80,7 @@ impl<'a> WordTree<'a> {
 fn build_wordtree_node<'a>() -> WordTree<'a> {
     WordTree {
         children: [const { None }; 26],
-        word: None,
+        words: None,
     }
 }
 
