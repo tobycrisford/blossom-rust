@@ -6,7 +6,7 @@ use std::time::Instant;
 use std::collections::HashMap;
 
 const NUM_CHARS: usize = 26;
-const INPUT_SIZE: usize = 3;
+const INPUT_SIZE: usize = 7;
 
 fn letter_index(c: &char) -> Result<usize, String> {
     if c.is_ascii_lowercase() {
@@ -135,6 +135,9 @@ fn solve_all_blossoms<'a>(
         return Ok(());
     }
     for ch in start_char..NUM_CHARS {
+        if current_idx == 0 {
+            println!("Working through: {}", ch);
+        }
         current_letters[current_idx] = ch;
         if current_idx < current_letters.len() - 1 {
             let _ = solve_all_blossoms(results, word_tree, current_letters, current_idx + 1);
