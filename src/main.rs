@@ -6,6 +6,7 @@ use std::time::Instant;
 use std::collections::HashMap;
 
 const NUM_CHARS: usize = 26;
+const INPUT_SIZE: usize = 3;
 
 fn letter_index(c: &char) -> Result<usize, String> {
     if c.is_ascii_lowercase() {
@@ -92,25 +93,6 @@ fn build_wordtree_node<'a>() -> WordTree<'a> {
     }
 }
 
-fn simple_baseline<'a>(word_list: &'a Vec<String>, letters: &HashSet<char>, mandatory_letter: char, found_words: &mut Vec<&'a String>) {
-    for word in word_list {
-        let mut valid = true;
-        let mut mandatory_valid = false;
-        for c in word.chars() {
-            if !letters.contains(&c) {
-                valid = false;
-                break;
-            }
-            if c == mandatory_letter {
-                mandatory_valid = true;
-            }
-        }
-        if valid & mandatory_valid {
-            found_words.push(word);
-        }
-    }
-}
-
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
 where P: AsRef<Path>, {
     let file = File::open(filename)?;
@@ -132,22 +114,7 @@ fn read_word_list() -> Vec<String> {
     words
 }
 
-fn parse_input(input: &str) -> (Vec<char>, char, HashSet<char>) {
-    if input.len() < 1 {
-        panic!("Must supply blossom letters")
-    }
-    let mut letters: Vec<char> = Vec::new();
-    let mandatory_letter = input.chars().next().unwrap();
-    let mut letter_set: HashSet<char> = HashSet::new();
-    for c in input.chars() {
-        if c == '\n' {
-            continue;
-        }
-        letters.push(c);
-        letter_set.insert(c);
-    }
-    return (letters, mandatory_letter, letter_set);
-}
+
 
 fn sort_output(word_list: &mut Vec<&String>) {
     word_list.sort_by_key(|w| w.len());
@@ -188,19 +155,144 @@ fn solve_all_blossoms<'a>(
     Ok(())
 }
 
-#[allow(unreachable_code)]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let start = Instant::now();
-    let words = read_word_list();
+fn build_word_tree_from_words(words: &Vec<String>) -> WordTree<'_> {
     let mut word_tree = build_wordtree_node();
-    for word in &words {
+    for word in words {
         word_tree.add_word(word, None, 0);
     }
-    println!("Loaded the word list in {} milliseconds", start.elapsed().as_millis());
+    return word_tree;
+}
 
-    let mut all_blossoms: HashMap<Vec<usize>, Vec<&String>> = HashMap::new();
-    let _ = solve_all_blossoms(&mut all_blossoms, &word_tree, &mut vec![0; 3], 0);
-    println!("Debug results: {:?}", all_blossoms.get(&vec![0, 1, 23, 0]));
+pub trait BlossomSolver {
+    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Vec<& String>, String>;
+
+    fn solve_with_timing(&self, available_letters: &[char], mandatory_letter: char) -> Result<(Vec<& String>, u128), String> {
+        let start = Instant::now();
+        let result = self.solve(available_letters, mandatory_letter)?;
+        let elapsed_time = start.elapsed().as_micros();
+        return Ok((result, elapsed_time));
+    }
+}
+
+struct TreeSolver<'a> {
+    word_tree: WordTree<'a>
+}
+impl BlossomSolver for TreeSolver<'_> {
+    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Vec<& String>, String> {
+        let letter_idxs: Vec<usize> = available_letters.iter().map(letter_index).collect::<Result<Vec<_>, _>>()?;
+        let mut found_words: Vec<& String> = Vec::new();
+        self.word_tree.find_words(&letter_idxs, mandatory_letter, &mut found_words);
+        sort_output(&mut found_words);
+        return Ok(found_words);
+    }
+}
+
+struct BaselineSolver<'a> {
+    words: &'a Vec<String>
+}
+impl BlossomSolver for BaselineSolver<'_> {
+    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Vec<& String>, String> {
+        let mut letter_set: HashSet<char> = HashSet::new();
+        for letter in available_letters {
+            letter_set.insert(*letter);
+        }
+        let mut found_words: Vec<& String> = Vec::new();
+        for word in self.words {
+            let mut valid = true;
+            let mut mandatory_valid = false;
+            for c in word.chars() {
+                if !letter_set.contains(&c) {
+                    valid = false;
+                    break;
+                }
+                if c == mandatory_letter {
+                    mandatory_valid = true;
+                }
+            }
+            if valid & mandatory_valid {
+                found_words.push(word);
+            }
+        }
+        sort_output(&mut found_words);
+        return Ok(found_words);
+    }
+}
+
+struct LookupSolver<'a> {
+    all_blossoms: HashMap<Vec<usize>, Vec<&'a String>>
+}
+impl BlossomSolver for LookupSolver<'_> {
+    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Vec<& String>, String> {
+        let mut letter_idxs: Vec<usize> = available_letters.iter().map(letter_index).collect::<Result<Vec<_>, _>>()?;
+        letter_idxs.sort();
+        letter_idxs.push(letter_index(&mandatory_letter)?);
+        match self.all_blossoms.get(&letter_idxs) {
+            None => Err("No entry found in lookup".to_string()),
+            Some(result) => Ok(result.clone()),
+        }
+    }
+}
+
+
+fn parse_input(input: &str) -> (Vec<char>, char) {
+    if input.len() < 1 {
+        panic!("Must supply blossom letters")
+    }
+    let mut letters: Vec<char> = Vec::new();
+    let mandatory_letter = input.chars().next().unwrap();
+    for c in input.chars() {
+        if c == '\n' {
+            continue;
+        }
+        letters.push(c);
+    }
+    return (letters, mandatory_letter);
+}
+
+
+#[allow(unreachable_code)]
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    
+    println!("Select solution mode out of: tree, lookup, baseline");
+    println!("If you select 'lookup', input size is hardcoded as {}", INPUT_SIZE);
+    let mut solve_mode = String::new();
+    io::stdin()
+        .read_line(&mut solve_mode)
+        .expect("Failed to read line");
+    let solve_mode = solve_mode.trim();
+
+    let construction_start = Instant::now();
+    let words = read_word_list();
+    let solver: Box<dyn BlossomSolver>;
+    if solve_mode == "tree" {
+        solver = Box::new(
+            TreeSolver {
+                word_tree: build_word_tree_from_words(&words),
+            }
+        );
+    }
+    else if solve_mode == "lookup" {
+        let word_tree = build_word_tree_from_words(&words);
+        let mut all_blossoms: HashMap<Vec<usize>, Vec<&String>> = HashMap::new();
+        let _ = solve_all_blossoms(&mut all_blossoms, &word_tree, &mut vec![0; INPUT_SIZE], 0);
+        solver = Box::new(
+            LookupSolver {
+                all_blossoms: all_blossoms,
+            }
+        );
+    }
+    else if solve_mode == "baseline" {
+        solver = Box::new(
+            BaselineSolver {
+                words: &words,
+            }
+        );
+    }
+    else {
+        println!("Solution mode you selected: {}", solve_mode);
+        panic!("Bad solution mode selected")
+    }
+    println!("Loaded the solver in {} milliseconds", construction_start.elapsed().as_millis());
 
     loop {
         println!("Input all letters, center letter first, lowercase and without spaces");
@@ -211,22 +303,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .read_line(&mut user_input)
             .expect("Failed to read line");
 
-        let (letters, mandatory_letter, letter_set) = parse_input(&user_input);
+        let (letters, mandatory_letter) = parse_input(&user_input);
 
-        let search_start = Instant::now();
-        let mut found_words: Vec<&String> = Vec::new();
-        let letter_idxs: Vec<usize> = letters.iter().map(letter_index).collect::<Result<Vec<_>, _>>()?;
-        word_tree.find_words(&letter_idxs, mandatory_letter, &mut found_words);
-        sort_output(&mut found_words);
-        println!("Found words: {:?}", found_words);
-        println!("Completed in {} microseconds", search_start.elapsed().as_micros());
+        let (solution, elapsed_time) = solver.solve_with_timing(&letters, mandatory_letter)?;
 
-        let baseline_start = Instant::now();
-        let mut baseline_words: Vec<&String> = Vec::new();
-        simple_baseline(&words, &letter_set, mandatory_letter, &mut baseline_words);
-        sort_output(&mut baseline_words);
-        println!("Baseline words: {:?}", baseline_words);
-        println!("Baseline completed in {} milliseconds", baseline_start.elapsed().as_millis());
+        println!("Found words: {:?}", solution);
+        println!("Completed in {} microseconds", elapsed_time);
     }
 
     Ok(())
