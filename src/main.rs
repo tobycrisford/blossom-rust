@@ -3,12 +3,23 @@ use std::io::{self, BufRead};
 use std::path::Path;
 use std::collections::HashSet;
 use std::time::Instant;
+use std::collections::HashMap;
+
+const NUM_CHARS: usize = 26;
 
 fn letter_index(c: &char) -> Result<usize, String> {
     if c.is_ascii_lowercase() {
         Ok((*c as usize) - ('a' as usize))
     } else {
         Err(format!("expected lowercase letter, got '{}'", c))
+    }
+}
+
+fn index_to_letter(i: usize) -> Result<char, String> {
+    if i < NUM_CHARS {
+        Ok(char::from(b'a' + i as u8))
+    } else {
+        Err(format!("expected index in range 0..NUM_CHARS, got {}", i))
     }
 }
 
@@ -20,7 +31,7 @@ fn word_to_idx_vec(w: &String) -> Result<Vec<usize>, String> {
     result.sort();
 
     let mut deduped_result = Vec::new();
-    let mut last_char: usize = 26 + 1;
+    let mut last_char: usize = NUM_CHARS + 1;
     for ch in result {
         if ch != last_char {
             last_char = ch;
@@ -31,7 +42,7 @@ fn word_to_idx_vec(w: &String) -> Result<Vec<usize>, String> {
 }
 
 struct WordTree<'a> {
-    children: [Option<Box<WordTree<'a>>>; 26],
+    children: [Option<Box<WordTree<'a>>>; NUM_CHARS],
     words: Vec<&'a String>,
 }
 impl<'a> WordTree<'a> {
@@ -76,7 +87,7 @@ impl<'a> WordTree<'a> {
 }
 fn build_wordtree_node<'a>() -> WordTree<'a> {
     WordTree {
-        children: [const { None }; 26],
+        children: [const { None }; NUM_CHARS],
         words: Vec::new(),
     }
 }
@@ -143,6 +154,40 @@ fn sort_output(word_list: &mut Vec<&String>) {
     word_list.reverse();
 }
 
+fn solve_all_blossoms<'a>(
+    results: &mut HashMap<Vec<usize>, Vec<&'a String>>,
+    word_tree: &WordTree<'a>,
+    current_letters: &mut Vec<usize>,
+    current_idx: usize
+) -> Result<(), String> {
+    let mut start_char = 0;
+    if current_idx > 0 {
+        start_char = current_letters[current_idx - 1] + 1;
+    }
+    if !(start_char < NUM_CHARS) {
+        return Ok(());
+    }
+    for ch in start_char..NUM_CHARS {
+        current_letters[current_idx] = ch;
+        if current_idx < current_letters.len() - 1 {
+            let _ = solve_all_blossoms(results, word_tree, current_letters, current_idx + 1);
+        }
+        else if current_idx == current_letters.len() - 1 {
+            for mandatory_letter in &*current_letters {
+                let mandatory_letter_char = index_to_letter(*mandatory_letter)?;
+                let mut found_words: Vec<&String> = Vec::new();
+                word_tree.find_words(current_letters, mandatory_letter_char, &mut found_words);
+                sort_output(&mut found_words);
+                let mut lookup_key = current_letters.clone();
+                lookup_key.push(*mandatory_letter);
+                results.insert(lookup_key, found_words);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[allow(unreachable_code)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
@@ -152,6 +197,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         word_tree.add_word(word, None, 0);
     }
     println!("Loaded the word list in {} milliseconds", start.elapsed().as_millis());
+
+    let mut all_blossoms: HashMap<Vec<usize>, Vec<&String>> = HashMap::new();
+    let _ = solve_all_blossoms(&mut all_blossoms, &word_tree, &mut vec![0; 3], 0);
+    println!("Debug results: {:?}", all_blossoms.get(&vec![0, 1, 23, 0]));
 
     loop {
         println!("Input all letters, center letter first, lowercase and without spaces");
