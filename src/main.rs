@@ -3,7 +3,6 @@ use std::io::{self, BufRead};
 use std::path::Path;
 use std::collections::HashSet;
 use std::time::Instant;
-use std::collections::HashMap;
 
 const NUM_CHARS: usize = 26;
 const INPUT_SIZE: usize = 7;
@@ -121,11 +120,34 @@ fn sort_output(word_list: &mut Vec<&String>) {
     word_list.reverse();
 }
 
+fn blossom_input_to_result_idx(input_letters: &Vec<usize>, mandatory_letter: usize) -> usize {
+    let mut idx = 0;
+    for i in 0..input_letters.len() {
+        let mut baseline = 0;
+        if i > 0 {
+            baseline = input_letters[i - 1] + 1;
+        }
+        if input_letters[i] > baseline {
+            idx += // to be implemented
+        }
+    }
+    idx *= input_letters.len();
+    idx += mandatory_letter;
+    return idx;
+}
+
+fn choose(n: usize, r: usize) -> usize {
+    if r > n { return 0; }
+    if r == 0 { return 1; }
+    let r = r.min(n - r);
+    (0..r).fold(1, |acc, i| acc * (n - i) / (i + 1))
+}
+
 fn solve_all_blossoms<'a>(
-    results: &mut HashMap<Vec<usize>, Vec<&'a String>>,
+    results: &mut Vec<Vec<&'a String>>,
     word_tree: &WordTree<'a>,
     current_letters: &mut Vec<usize>,
-    current_idx: usize
+    current_idx: usize,
 ) -> Result<(), String> {
     let mut start_char = 0;
     if current_idx > 0 {
@@ -148,9 +170,12 @@ fn solve_all_blossoms<'a>(
                 let mut found_words: Vec<&String> = Vec::new();
                 word_tree.find_words(current_letters, mandatory_letter_char, &mut found_words);
                 sort_output(&mut found_words);
-                let mut lookup_key = current_letters.clone();
-                lookup_key.push(*mandatory_letter);
-                results.insert(lookup_key, found_words);
+                let lookup_key = blossom_input_to_result_idx(&current_letters, *mandatory_letter);
+                if results[lookup_key].len() > 0 {
+                    println!("Already have values for this key {:?}", found_words);
+                    println!("Values already there {:?}", results[lookup_key]);
+                }
+                results[lookup_key] = found_words;
             }
         }
     }
@@ -222,17 +247,15 @@ impl BlossomSolver for BaselineSolver<'_> {
 }
 
 struct LookupSolver<'a> {
-    all_blossoms: HashMap<Vec<usize>, Vec<&'a String>>
+    all_blossoms: Vec<Vec<&'a String>>
 }
 impl BlossomSolver for LookupSolver<'_> {
     fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Vec<& String>, String> {
         let mut letter_idxs: Vec<usize> = available_letters.iter().map(letter_index).collect::<Result<Vec<_>, _>>()?;
         letter_idxs.sort();
-        letter_idxs.push(letter_index(&mandatory_letter)?);
-        match self.all_blossoms.get(&letter_idxs) {
-            None => Err("No entry found in lookup".to_string()),
-            Some(result) => Ok(result.clone()),
-        }
+        let mandatory_letter_idx = letter_index(&mandatory_letter)?;
+        let lookup_key = blossom_input_to_result_idx(&letter_idxs, mandatory_letter_idx);
+        return Ok(self.all_blossoms[lookup_key].clone());
     }
 }
 
@@ -276,7 +299,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     else if solve_mode == "lookup" {
         let word_tree = build_word_tree_from_words(&words);
-        let mut all_blossoms: HashMap<Vec<usize>, Vec<&String>> = HashMap::new();
+        let mut all_blossoms: Vec<Vec<&String>> = vec![Vec::new(); choose(NUM_CHARS, INPUT_SIZE) * INPUT_SIZE];
         let _ = solve_all_blossoms(&mut all_blossoms, &word_tree, &mut vec![0; INPUT_SIZE], 0);
         solver = Box::new(
             LookupSolver {
