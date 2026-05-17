@@ -7,6 +7,7 @@ use std::borrow::Cow;
 
 const NUM_CHARS: usize = 26;
 const INPUT_SIZE: usize = 7;
+const MIN_WORD_SIZE: usize = 4;
 
 fn letter_index(c: &char) -> Result<usize, String> {
     if c.is_ascii_lowercase() {
@@ -104,7 +105,9 @@ fn read_word_list() -> Vec<String> {
     match read_lines("./words.txt") {
         Ok(lines) => {
             for line in lines.map_while(Result::ok) {
-                words.push(line);
+                if line.len() >= MIN_WORD_SIZE {
+                    words.push(line);
+                }
             }
         }
         Err(e) => {
