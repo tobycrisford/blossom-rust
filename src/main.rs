@@ -120,27 +120,31 @@ fn sort_output(word_list: &mut Vec<&String>) {
     word_list.reverse();
 }
 
-fn blossom_input_to_result_idx(input_letters: &Vec<usize>, mandatory_letter: usize) -> usize {
-    let mut idx = 0;
-    for i in 0..input_letters.len() {
-        let mut baseline = 0;
-        if i > 0 {
-            baseline = input_letters[i - 1] + 1;
-        }
-        if input_letters[i] > baseline {
-            idx += // to be implemented
-        }
-    }
-    idx *= input_letters.len();
-    idx += mandatory_letter;
-    return idx;
-}
-
 fn choose(n: usize, r: usize) -> usize {
     if r > n { return 0; }
     if r == 0 { return 1; }
     let r = r.min(n - r);
     (0..r).fold(1, |acc, i| acc * (n - i) / (i + 1))
+}
+
+fn blossom_input_to_result_idx(input_letters: &Vec<usize>, mandatory_letter: usize) -> usize {
+    let mut idx = 0;
+    
+    let r = input_letters.len();
+    for i in 0..r {
+        idx += choose(input_letters[i], i + 1);
+    }
+
+    let mut mandatory_letter_loc = 0;
+    for i in 0..r {
+        if input_letters[i] == mandatory_letter {
+            mandatory_letter_loc = i;
+            break;
+        }
+    }
+    idx *= r;
+    idx += mandatory_letter_loc;
+    return idx;
 }
 
 fn solve_all_blossoms<'a>(
@@ -172,8 +176,7 @@ fn solve_all_blossoms<'a>(
                 sort_output(&mut found_words);
                 let lookup_key = blossom_input_to_result_idx(&current_letters, *mandatory_letter);
                 if results[lookup_key].len() > 0 {
-                    println!("Already have values for this key {:?}", found_words);
-                    println!("Values already there {:?}", results[lookup_key]);
+                    panic!("Key collision: {:?}", results[lookup_key]);
                 }
                 results[lookup_key] = found_words;
             }
@@ -279,7 +282,7 @@ fn parse_input(input: &str) -> (Vec<char>, char) {
 #[allow(unreachable_code)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     
-    println!("Select solution mode out of: tree, lookup, baseline");
+    println!("Select solution mode out of: tree, baseline, lookup");
     println!("If you select 'lookup', input size is hardcoded as {}", INPUT_SIZE);
     let mut solve_mode = String::new();
     io::stdin()
@@ -306,6 +309,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 all_blossoms: all_blossoms,
             }
         );
+
     }
     else if solve_mode == "baseline" {
         solver = Box::new(
@@ -332,7 +336,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (letters, mandatory_letter) = parse_input(&user_input);
 
         let (solution, elapsed_time) = solver.solve_with_timing(&letters, mandatory_letter)?;
-
         println!("Found words: {:?}", solution);
         println!("Completed in {} microseconds", elapsed_time);
     }
