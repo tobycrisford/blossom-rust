@@ -20,19 +20,21 @@ function decode_idx(idx_bytes) {
 
 function solve(input, soln_data, soln_bytes) {
     let soln_slice = soln_data.solutions[input];
-    soln_slice[0] *= IDX_SIZE;
-    soln_slice[1] *= IDX_SIZE;
+    let [lower, upper] = [soln_slice[0] * IDX_SIZE, soln_slice[1] * IDX_SIZE];
     let solns = [];
-    for (let i = soln_slice[0];i < soln_slice[1];i+=IDX_SIZE) {
+    for (let i = lower;i < upper;i+=IDX_SIZE) {
         solns.push(soln_data.words[decode_idx(soln_bytes.slice(i, i+IDX_SIZE))]);
     }
     return solns;
 }
 
 function ui_solve() {
+    const start = performance.now();
     const input = document.getElementById("input_letters").value;
     const solns = solve(input, soln_data, soln_bytes);
-    document.getElementById("outputs").innerHTML = solns.toString();
+    const end = performance.now();
+    const output = `Solved in ${end - start} milliseconds\n\n${solns.toString()}`;
+    document.getElementById("outputs").innerHTML = output;
 }
 
 function assemble_input_elements() {
