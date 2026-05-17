@@ -156,6 +156,29 @@ fn blossom_input_to_result_idx(input_letters: &Vec<usize>, mandatory_letter: usi
     return idx;
 }
 
+fn result_idx_to_blossom_input(result_idx: usize) -> Result<String, String> {
+    let mandatory_letter_idx = result_idx % INPUT_SIZE;
+    let mut reduced_idx: usize = result_idx / INPUT_SIZE;
+    
+    let mut char_idxs = [0; INPUT_SIZE];
+    let mut c = NUM_CHARS - 1;
+    let mut char_idx_counter = 0;
+    for i in 0..INPUT_SIZE {
+        while choose(c, INPUT_SIZE - i) > reduced_idx {
+            c -= 1;
+        }
+        char_idxs[char_idx_counter] = c;
+        char_idx_counter += 1;
+        reduced_idx -= choose(c, INPUT_SIZE - i);
+        c -= 1;
+    }
+    char_idxs.reverse();
+    
+    let mut input_chars: Vec<char> = char_idxs.iter().copied().map(index_to_letter).collect::<Result<Vec<_>,_>>()?;
+    input_chars.push(index_to_letter(char_idxs[mandatory_letter_idx])?);
+    return Ok(input_chars.into_iter().collect());
+}
+
 fn solve_all_blossoms<'a>(
     results: &mut Vec<Vec<&'a String>>,
     word_tree: &WordTree<'a>,
@@ -378,10 +401,18 @@ fn run_json_export() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // Export lookup table for javascript
+
+// Need to compress solutions as much as possible
+fn usize_to_u24(val: usize) -> Option<[u8; 3]> {
+    let val = u32::try_from(val).ok().filter(|&v| v <= 0xFF_FFFF)?;
+    let [a, b, c, _] = val.to_le_bytes();
+    Some([a, b, c])
+}
+
 #[derive(Serialize, Deserialize)]
 struct BlossomSolutionsJson {
     words: Vec<String>,
-    solutions: Vec<Vec<usize>>,
+    solutions: HashMap<String, [usize; 2]>,
 }
 fn create_json_export(word_list: &[String], all_blossoms: &[Vec<&String>], output_filename: &str) -> Result<(), Box<dyn std::error::Error>> {
     let dict_output: Vec<String> = word_list.to_vec();
@@ -390,19 +421,30 @@ fn create_json_export(word_list: &[String], all_blossoms: &[Vec<&String>], outpu
         word_to_idx.insert(dict_output[i].as_str(), i);
     }
 
-    let mut solution_output: Vec<Vec<usize>> = Vec::new();
-    for solution in all_blossoms {
-        let mut soln_idxs: Vec<usize> = Vec::new();
+    let mut solution_output: HashMap<String, [usize; 2]> = HashMap::new();
+    let mut solution_bytes: Vec<u8> = Vec::new();
+    let mut word_pointer_counter = 0;
+    for i in 0..all_blossoms.len() {
+        let solution = &all_blossoms[i];
+        let soln_start = word_pointer_counter;
         for word in solution {
             if let Some(idx) = word_to_idx.get(word.as_str()) {
-                soln_idxs.push(*idx);
+                if let Some(bytes_out) = usize_to_u24(*idx) {
+                    solution_bytes.extend_from_slice(& bytes_out);
+                }
+                else {
+                    return Err("Solution indices are too big for current compression".into());
+                }
             }
             else {
                 return Err("Unrecognized word in solutions!".into());
             }
+            word_pointer_counter += 1;
         }
-        solution_output.push(soln_idxs);
+        let soln_end = word_pointer_counter;
+        solution_output.insert(result_idx_to_blossom_input(i)?, [soln_start, soln_end]);
     }
+    println!("Number of word pointers: {}", word_pointer_counter);
 
     let json_output = BlossomSolutionsJson {
         words: dict_output,
@@ -410,6 +452,6 @@ fn create_json_export(word_list: &[String], all_blossoms: &[Vec<&String>], outpu
     };
     let json_output_str = serde_json::to_string(&json_output)?;
     fs::write(output_filename, json_output_str)?;
-
+    fs::write(format!("{}.bin", output_filename), &solution_bytes)?;
     Ok(())
 }
