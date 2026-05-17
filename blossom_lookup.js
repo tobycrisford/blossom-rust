@@ -1,5 +1,8 @@
 const IDX_SIZE = 3;
 
+soln_data = null;
+soln_bytes = null;
+
 async function load_data () {
     const response = await fetch('./all_solns.json');
     const data = await response.json();
@@ -11,22 +14,43 @@ async function load_data () {
     return [data, soln_bytes];
 }
 
-const soln_data = load_data();
-
 function decode_idx(idx_bytes) {
     return idx_bytes[0] | (idx_bytes[1] << 8) | (idx_bytes[2] << 16);
 }
 
-async function solve(input) {
-    const fetched_data = await soln_data;
-    let soln_slice = fetched_data[0].solutions[input];
+function solve(input, soln_data, soln_bytes) {
+    let soln_slice = soln_data.solutions[input];
     soln_slice[0] *= IDX_SIZE;
     soln_slice[1] *= IDX_SIZE;
     let solns = [];
     for (let i = soln_slice[0];i < soln_slice[1];i+=IDX_SIZE) {
-        solns.push(fetched_data[0].words[decode_idx(fetched_data[1].slice(i, i+IDX_SIZE))]);
+        solns.push(soln_data.words[decode_idx(soln_bytes.slice(i, i+IDX_SIZE))]);
     }
-    console.log(solns);
+    return solns;
 }
 
-solve("acdentut");
+function ui_solve() {
+    const input = document.getElementById("input_letters").value;
+    const solns = solve(input, soln_data, soln_bytes);
+    document.getElementById("outputs").innerHTML = solns.toString();
+}
+
+function assemble_input_elements() {
+    const input_div = document.getElementById("inputs");
+    const input_field = document.createElement("input");
+    input_field.type = "text";
+    input_field.id = "input_letters";
+    input_div.appendChild(input_field);
+    const submit_button = document.createElement("button");
+    submit_button.textContent = "Solve";
+    submit_button.addEventListener("click", ui_solve);
+    input_div.appendChild(submit_button);
+}
+
+async function page_load() {
+    const status = document.getElementById("status");
+    status.innerHTML = "Setting up - this may take some time...";
+    [soln_data, soln_bytes] = await load_data();
+    status.innerHTML = "All set. Lets solve some Blossom!";
+    assemble_input_elements();
+}
