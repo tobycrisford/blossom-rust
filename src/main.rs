@@ -3,6 +3,7 @@ use std::io::{self, BufRead};
 use std::path::Path;
 use std::collections::HashSet;
 use std::time::Instant;
+use std::borrow::Cow;
 
 const NUM_CHARS: usize = 26;
 const INPUT_SIZE: usize = 7;
@@ -195,9 +196,9 @@ fn build_word_tree_from_words(words: &Vec<String>) -> WordTree<'_> {
 }
 
 pub trait BlossomSolver {
-    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Vec<& String>, String>;
+    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Cow<'_, [& String]>, String>;
 
-    fn solve_with_timing(&self, available_letters: &[char], mandatory_letter: char) -> Result<(Vec<& String>, u128), String> {
+    fn solve_with_timing(&self, available_letters: &[char], mandatory_letter: char) -> Result<(Cow<'_, [& String]>, u128), String> {
         let start = Instant::now();
         let result = self.solve(available_letters, mandatory_letter)?;
         let elapsed_time = start.elapsed().as_micros();
@@ -209,12 +210,12 @@ struct TreeSolver<'a> {
     word_tree: WordTree<'a>
 }
 impl BlossomSolver for TreeSolver<'_> {
-    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Vec<& String>, String> {
+    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Cow<'_, [& String]>, String> {
         let letter_idxs: Vec<usize> = available_letters.iter().map(letter_index).collect::<Result<Vec<_>, _>>()?;
         let mut found_words: Vec<& String> = Vec::new();
         self.word_tree.find_words(&letter_idxs, mandatory_letter, &mut found_words);
         sort_output(&mut found_words);
-        return Ok(found_words);
+        return Ok(Cow::Owned(found_words));
     }
 }
 
@@ -222,7 +223,7 @@ struct BaselineSolver<'a> {
     words: &'a Vec<String>
 }
 impl BlossomSolver for BaselineSolver<'_> {
-    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Vec<& String>, String> {
+    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Cow<'_, [& String]>, String> {
         let mut letter_set: HashSet<char> = HashSet::new();
         for letter in available_letters {
             letter_set.insert(*letter);
@@ -245,7 +246,7 @@ impl BlossomSolver for BaselineSolver<'_> {
             }
         }
         sort_output(&mut found_words);
-        return Ok(found_words);
+        return Ok(Cow::Owned(found_words));
     }
 }
 
@@ -253,12 +254,12 @@ struct LookupSolver<'a> {
     all_blossoms: Vec<Vec<&'a String>>
 }
 impl BlossomSolver for LookupSolver<'_> {
-    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Vec<& String>, String> {
+    fn solve(&self, available_letters: &[char], mandatory_letter: char) -> Result<Cow<'_, [& String]>, String> {
         let mut letter_idxs: Vec<usize> = available_letters.iter().map(letter_index).collect::<Result<Vec<_>, _>>()?;
         letter_idxs.sort();
         let mandatory_letter_idx = letter_index(&mandatory_letter)?;
         let lookup_key = blossom_input_to_result_idx(&letter_idxs, mandatory_letter_idx);
-        return Ok(self.all_blossoms[lookup_key].clone());
+        return Ok(Cow::Borrowed(&self.all_blossoms[lookup_key]));
     }
 }
 
