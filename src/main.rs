@@ -5,6 +5,11 @@ use std::collections::HashSet;
 use std::time::Instant;
 use std::borrow::Cow;
 
+// Used for json export of soln lookup
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::fs;
+
 const NUM_CHARS: usize = 26;
 const INPUT_SIZE: usize = 7;
 const MIN_WORD_SIZE: usize = 4;
@@ -282,10 +287,17 @@ fn parse_input(input: &str) -> (Vec<char>, char) {
     return (letters, mandatory_letter);
 }
 
+fn build_lookup_solver(words: &Vec<String>) -> LookupSolver<'_> {
+    let word_tree = build_word_tree_from_words(words);
+    let mut all_blossoms: Vec<Vec<&String>> = vec![Vec::new(); choose(NUM_CHARS, INPUT_SIZE) * INPUT_SIZE];
+    let _ = solve_all_blossoms(&mut all_blossoms, &word_tree, &mut vec![0; INPUT_SIZE], 0);
+    return LookupSolver {
+        all_blossoms: all_blossoms,
+    };
+}
 
 #[allow(unreachable_code)]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    
+fn blossom_solver() -> Result<(), Box<dyn std::error::Error>> {
     println!("Select solution mode out of: tree, baseline, lookup");
     println!("If you select 'lookup', input size is hardcoded as {}", INPUT_SIZE);
     let mut solve_mode = String::new();
@@ -305,15 +317,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
     else if solve_mode == "lookup" {
-        let word_tree = build_word_tree_from_words(&words);
-        let mut all_blossoms: Vec<Vec<&String>> = vec![Vec::new(); choose(NUM_CHARS, INPUT_SIZE) * INPUT_SIZE];
-        let _ = solve_all_blossoms(&mut all_blossoms, &word_tree, &mut vec![0; INPUT_SIZE], 0);
-        solver = Box::new(
-            LookupSolver {
-                all_blossoms: all_blossoms,
-            }
-        );
-
+        solver = Box::new(build_lookup_solver(&words));
     }
     else if solve_mode == "baseline" {
         solver = Box::new(
@@ -324,7 +328,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     else {
         println!("Solution mode you selected: {}", solve_mode);
-        panic!("Bad solution mode selected")
+        return Err("Bad solution mode selected".into());
     }
     println!("Loaded the solver in {} milliseconds", construction_start.elapsed().as_millis());
 
@@ -343,6 +347,69 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Found words: {:?}", solution);
         println!("Completed in {} microseconds", elapsed_time);
     }
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("solver or export?");
+    let mut run_option = String::new();
+    io::stdin()
+        .read_line(&mut run_option)
+        .expect("Failed to read line");
+    let run_option = run_option.trim();
+    if run_option == "solver" {
+        let _ = blossom_solver()?;
+    }
+    else if run_option == "export" {
+        let _ = run_json_export();
+    }
+    else {
+        return Err("Bad option!".into());
+    }
+    Ok(())
+}
+
+fn run_json_export() -> Result<(), Box<dyn std::error::Error>> {
+    let words = read_word_list();
+    let solver = build_lookup_solver(&words);
+    create_json_export(&words, &solver.all_blossoms, "all_solns.json")?;
+    Ok(())
+}
+
+// Export lookup table for javascript
+#[derive(Serialize, Deserialize)]
+struct BlossomSolutionsJson {
+    words: Vec<String>,
+    solutions: Vec<Vec<usize>>,
+}
+fn create_json_export(word_list: &[String], all_blossoms: &[Vec<&String>], output_filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let dict_output: Vec<String> = word_list.to_vec();
+    let mut word_to_idx: HashMap<&str, usize> = HashMap::new();
+    for i in 0..dict_output.len() {
+        word_to_idx.insert(dict_output[i].as_str(), i);
+    }
+
+    let mut solution_output: Vec<Vec<usize>> = Vec::new();
+    for solution in all_blossoms {
+        let mut soln_idxs: Vec<usize> = Vec::new();
+        for word in solution {
+            if let Some(idx) = word_to_idx.get(word.as_str()) {
+                soln_idxs.push(*idx);
+            }
+            else {
+                return Err("Unrecognized word in solutions!".into());
+            }
+        }
+        solution_output.push(soln_idxs);
+    }
+
+    let json_output = BlossomSolutionsJson {
+        words: dict_output,
+        solutions: solution_output,
+    };
+    let json_output_str = serde_json::to_string(&json_output)?;
+    fs::write(output_filename, json_output_str)?;
 
     Ok(())
 }
